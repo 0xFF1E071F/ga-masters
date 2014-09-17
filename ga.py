@@ -2,16 +2,49 @@ from random import random
 import math
 import expr
 from copy import copy
+import textextraction as tx
+
+def lg(x):
+    return math.log(x) / math.log(2.0)
+
+OPCODES = sorted({"aaa","aad","aas","adc","add","and","arpl","bound","bsf","bsr","bswap","bt",
+                  "btc","btr","bts","call","cbw","cdq","mov", "equ", "proc", "neg","cld", "cli",
+                  "push", "or", "pop", "rep", "xor", "out", "in", "db", "daa","das","dec","div",
+                  "enter","esc","hlt","idiv","imul","inc","ins","into","invd","invlpg","iret",
+                  "ja","jae","jb","jbe","jc","jcxz","je","jg","jge","jl","jle","jnc","jno","jns",
+                  "jnp","jo","jp","js","lahf","lar","lds","leave","les","lfs","lgdt","lidt","lgs",
+                  "lldt","lmsw","lock","lods","loop","loope","loopnz","lsl","lss","ltr","movs",
+                  "movsx","movzx","mul","neg","nop","not","outs","popa","popf","pusha","pushf",
+                  "rcl","rcr","rep","repe","repne","ret","rol","ror","sahf","sal","sbb","scas",
+                  "setae","setb","setbe","sete","setne","setl","setge","setle","setg","sets",
+                  "setns","setc","setnc","seto","setno","setp","setnp","sgdt","sidt","shr","shld",
+                  "sldt","smsw","stc,","std","sti","stos","str","sub","test","verr","verw","wait",
+                  "jmp","clts","cmc","cmps","cmpxchg","cwd","cwde", "int", "cmp","call", "wbinvd",
+                  "sub", "lea", "jne","retf", "sub", "sbb", "clc", "xchg", "dw","xlat"})
+
+
+GENE_LENGTH = int(math.ceil(lg(len(OPCODES))))
+
+
+def get_binary(opcode):
+    '''
+    Return a binary string representing an opcode. Gene size is decided as
+    minimum number of bits required to represent all the opcodes in the
+    above table.
+
+    '''
+    token = OPCODES.index(opcode)
+    val = bin(token)[2:]    # bin returns the binary rep of a number prefixed with a '0b' - the [2:] takes...
+    val = ('0' * (GENE_LENGTH - len(val))) + val   # ...everything after the prefix.
+    return val
+
 
 CROSSOVER_RATE              = 0.7
 MUTATION_RATE               = 0.001
 POP_SIZE                    = 100
 
 # Not used at all here, but was there in Fup's C++ code.
-CHROMO_LENGTH               = 300
-
-# Length of each gene - For our purpose, 4 bits are enough.
-GENE_LENGTH                 = 4
+CHROMO_LENGTH               = 320
 
 # Number of times to try before we give up :P
 MAX_ALLOWABLE_GENERATIONS   = 400
@@ -66,102 +99,43 @@ def mutate(chromosome):
     chromosome.bits = ''.join(map(str, result))
     return ret
 #----------------------------------------------------------------
-def decode(chromosome, symbolize_ops=False):
-    '''Takes a chromosome, and decodes it.
-    The result is returned as a list of tokens.
-
-    If symbolize_ops is true, operator symbols are used in the result
-    instead of operator values.
-
-    e.g., if the bit pattern is '100110101000', the result when
-    symbolize_ops is True is:
-        [9, '+', 8]
-    else, it is 
-        [9, 10, 8]
-    '''
-    op = False
-    mapping = {10: '+', 11: '-', 12: '*', 13: '/'}
-    result = []
-    for i in xrange(0, chromosome.length(), GENE_LENGTH):
-        val = int(chromosome.bits[i: (i + GENE_LENGTH)], 2)
-        if op:
-            if val < 10 or val > 13:
-                continue
-            if symbolize_ops:
-                result.append(mapping[val])
-            else:
-                result.append(val)
-            op = False
-        else:
-            if val > 9:
-                continue
-            result.append(val)
-            op = True
-
-    return result
+def decode(chromosome):
+    '''Decode a chromosome into a sequence of opcodes.'''
+    binary_opcodes = [chromosome.bits[i:i+GENE_LENGTH] for i in xrange(0, chromosome.length(), GENE_LENGTH)]
+    opcode_sequence = []
+    for binary_opcode in binary_opcodes:
+        opcode_idx = int(binary_opcode, 2)
+        if opcode_idx >= len(OPCODES):
+            continue
+        opcode_sequence.append(OPCODES[opcode_idx])
+    return opcode_sequence
 #----------------------------------------------------------------
 def decode_as_str(chromosome):
     '''return the decoded chromosome as an str'''
-    decoded = decode(chromosome, symbolize_ops=True)
+    decoded = decode(chromosome)
     return ' '.join(map(str, decoded))
 #----------------------------------------------------------------
-def encode(e):
-    '''takes an expression array and returns a bitstring.
-    See decode() on how the expression string should look like.
-    '''
-    encoded = ''
-    for token in e:
-        if expr.is_numeral(token):
-            val = bin(token)[2:]    # bin returns the binary rep of a number prefixed with a '0b' - the [2:] takes...
-            val = ('0' * (GENE_LENGTH - len(val))) + val   # ...everything after the prefix.
-            encoded += val                                  
-
-        elif expr.is_operator(token):
-            val = bin(10 + OPERATORS.index(token))[2:]
-            val = ('0' * (GENE_LENGTH - len(val))) + val
-            encoded += val
-        
-        else:
-            raise NameError('invalid symbol in encode: {symbol}'.format(symbol=token))
-
-    return encoded
+def encode(seq):
+    '''Encode an opcode sequence into a binary string'''
+    encoded = []
+    for opcode in seq:
+        encoded.append(get_binary(opcode))
+    return ''.join(encoded)
 #----------------------------------------------------------------
 def evaluate_fitness(chromosome, target):
-    '''evaluates and sets the fitness.
-       Returns _False_ if this is a solution(fitness was _NOT_ evaluated).
-       Returns _True_ if not a solution(Fitness _WAS_ evaluated).
+    '''Evaluate an opcode sequence. Right now, seek to make the opcode sequence
+       ``target`` opcodes long
     '''
     changed = False
-    decoded = decode(chromosome, symbolize_ops=True)
-
-    # We have to look for a possible divide by zero error.
-    # We look for such a pattern(a '/' followed by a 0) and then replace
-    # the '/' with a '+'. This should prevent the Exception at runtime
-    # without affecting the evolution of the chromosome.
-    for i in xrange(len(decoded) - 1):
-        if decoded[i] == '/' and decoded[i+1] == 0:
-            changed = True
-            decoded[i] = '+'
-
-    # Remove trailing operators, as they obviously are meaningless.
-    while decoded[-1] in OPERATORS:
-        changed = True
-        decoded.pop()
-
-    # Reflect the changes in the chromosome.
-    if changed:
-        chromosome.bits = encode(decoded)
-
-    try:
-        val = expr.evaluate(decoded)
-    except ZeroDivisionError:
-        val = 99999 # A large value, making the fitness very bad.
-
-    if val == target:
-        return False
-
-    fitness = 1.0 / abs(target - val)
+    seq = decode(chromosome)
+    uniq_opcodes = set(seq)
+    n_common = float(len(uniq_opcodes.intersection(target)))
+    n_total = float(len(target))
+    fitness = n_common / n_total
     chromosome.fitness = fitness
+    # PLAY WITH THIS VALUE 0.8
+    if fitness >= 0.8:
+        return False
     return True
 #----------------------------------------------------------------
 def roulette_select(total_fitness, population):
@@ -192,7 +166,8 @@ def ga_main(target):
     population = []
     # Generate the initial population:
     for i in xrange(POP_SIZE):
-        c = Chromosome(get_random_bits(CHROMO_LENGTH))
+        bits = get_random_bits(CHROMO_LENGTH)
+        c = Chromosome(bits)
         population.append(c)
 
     gens_required = 0
@@ -202,7 +177,7 @@ def ga_main(target):
         for phenotype in population:
             if evaluate_fitness(phenotype, target) == False: # solution found
                 print("***Solution found in {n} generations: {s} "
-                      .format(n=gens_required, s=decode_as_str(phenotype)))
+                      .format(n=gens_required, s=','.join(decode(phenotype))))
                 soln_found = True
                 break
 
@@ -245,7 +220,10 @@ def ga_main(target):
 #--------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
     while True: # As fup says, repeat till the user gets bored!
-        target = input('The target: ')
-        ga_main(target)
+        target = raw_input('The target file: ')
+        if not target.split():
+            target = '100%.asm'
+        opcodes = [opcode for opcode, in tx.n_gram_opcodes(target, 1).keys()]
+        ga_main(opcodes)
 #---------------------------------------------------------------------------------------------------
 
