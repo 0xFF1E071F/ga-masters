@@ -7,20 +7,8 @@ import textextraction as tx
 def lg(x):
     return math.log(x) / math.log(2.0)
 
-OPCODES = sorted({"aaa","aad","aas","adc","add","and","arpl","bound","bsf","bsr","bswap","bt",
-                  "btc","btr","bts","call","cbw","cdq","mov", "equ", "proc", "neg","cld", "cli",
-                  "push", "or", "pop", "rep", "xor", "out", "in", "db", "daa","das","dec","div",
-                  "enter","esc","hlt","idiv","imul","inc","ins","into","invd","invlpg","iret",
-                  "ja","jae","jb","jbe","jc","jcxz","je","jg","jge","jl","jle","jnc","jno","jns",
-                  "jnp","jo","jp","js","lahf","lar","lds","leave","les","lfs","lgdt","lidt","lgs",
-                  "lldt","lmsw","lock","lods","loop","loope","loopnz","lsl","lss","ltr","movs",
-                  "movsx","movzx","mul","neg","nop","not","outs","popa","popf","pusha","pushf",
-                  "rcl","rcr","rep","repe","repne","ret","rol","ror","sahf","sal","sbb","scas",
-                  "setae","setb","setbe","sete","setne","setl","setge","setle","setg","sets",
-                  "setns","setc","setnc","seto","setno","setp","setnp","sgdt","sidt","shr","shld",
-                  "sldt","smsw","stc,","std","sti","stos","str","sub","test","verr","verw","wait",
-                  "jmp","clts","cmc","cmps","cmpxchg","cwd","cwde", "int", "cmp","call", "wbinvd",
-                  "sub", "lea", "jne","retf", "sub", "sbb", "clc", "xchg", "dw","xlat"})
+OPCODES = sorted({"add","call","cmp","mov","jnz","jmp","jz","lea","pop","push",
+        "retn","sub","test","xor"})
 
 
 GENE_LENGTH = int(math.ceil(lg(len(OPCODES))))
@@ -50,7 +38,7 @@ CHROMO_LENGTH               = 320
 MAX_ALLOWABLE_GENERATIONS   = 400
 
 OPERATORS = ['+', '-', '*', '/']
-                
+
 # ==============================================================#
 # Chromosome                                                    #
 # - The class that represents a chromosome                      #
@@ -65,17 +53,17 @@ class Chromosome:
         return len(self.bits)
 #----------------------------------------------------------------
 def crossover(offspring1, offspring2):
-    '''Takes two Chromosome objects, and crosses over their parts 
+    '''Takes two Chromosome objects, and crosses over their parts
     as determined by the crossover rate.
 
     *Note: I've used the greater of the lengths of the two
-    chromosomes to determine the crossover position. Fup's code 
+    chromosomes to determine the crossover position. Fup's code
     uses CHROMO_LENGTH to do the same.
     '''
     if random() < CROSSOVER_RATE:
         cpos = int(random() * max(offspring1.length(), offspring2.length()))
         offspring1.bits, offspring2.bits = (
-                                  offspring1.bits[:cpos] + offspring2.bits[cpos:], 
+                                  offspring1.bits[:cpos] + offspring2.bits[cpos:],
                                   offspring2.bits[:cpos] + offspring1.bits[cpos:]
                                  )
         return True
@@ -84,7 +72,7 @@ def crossover(offspring1, offspring2):
 #----------------------------------------------------------------
 def mutate(chromosome):
     '''Steps through each "bit" in the chromosome, and as determined
-    by the mutation rate, flips the bit. 
+    by the mutation rate, flips the bit.
     '''
     result = []
     ret = False
@@ -158,7 +146,7 @@ def get_random_bits(length):
             result += '0'
         else:
             result += '1'
-    
+
     return result
 #----------------------------------------------------------------
 def ga_main(target):
@@ -196,14 +184,14 @@ def ga_main(target):
             c2 = None
             while c2 == None:
                 c2 = roulette_select(total_fitness, population)
-            
+
             c1, c2 = copy(c1), copy(c2) # Required, as the original population will
                                         # be affected otherwise.
 
             crossover(c1, c2)
             mutate(c1)
             mutate(c2)
-            
+
             tmp.append(c1)
             tmp.append(c2)
 
@@ -226,4 +214,3 @@ if __name__ == '__main__':
         opcodes = [opcode for opcode, in tx.n_gram_opcodes(target, 1).keys()]
         ga_main(opcodes)
 #---------------------------------------------------------------------------------------------------
-
