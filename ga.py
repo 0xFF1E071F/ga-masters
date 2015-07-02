@@ -1,6 +1,7 @@
 from random import random
 import math
 import expr
+import fitness
 from copy import copy
 import textextraction as tx
 
