@@ -165,8 +165,9 @@ def ga_main(target):
         # Assign fitnesses
         for phenotype in population:
             if evaluate_fitness(phenotype, target) == False: # solution found
-                print("***Solution found in {n} generations: {s} "
-                      .format(n=gens_required, s=','.join(decode(phenotype))))
+                #print("***Solution found in {n} generations: {s} "
+                #      .format(n=gens_required, s=','.join(decode(phenotype))))
+                print("***Solution found: {s}".format(s=','.join(decode(phenotype))))
                 soln_found = True
                 break
 
